@@ -82,6 +82,24 @@ function auth(ctx) {
     return { Authorization: 'Bearer ' + key };
 }
 
+function resultVideoUrl(value) {
+    const queue = [value];
+    const seen = new Set();
+    for (let index = 0; index < queue.length && index < 32; index++) {
+        const item = queue[index];
+        if (!isObject(item) || seen.has(item)) continue;
+        seen.add(item);
+        const metadata = object(item.metadata);
+        const target = text(metadata.url || item.result_url || item.video_url || item.download_url || item.output_url
+            || item.content_url || item.url || object(item.video).url || object(item.output).url || object(item.result).url);
+        if (/^https?:\/\//i.test(target)) return target;
+        for (const key of ['data', 'result', 'output', 'video', 'task', 'response']) {
+            if (isObject(item[key])) queue.push(item[key]);
+        }
+    }
+    return '';
+}
+
 export const protocols = {
     openai_video: {
         decodeRequest(ctx) {
@@ -168,11 +186,12 @@ export function buildQueryRequest(ctx) {
 export function parseTaskResult(ctx, raw) {
     const wrapper = object(raw);
     const body = isObject(wrapper.data) ? wrapper.data : wrapper;
+    const resultUrl = resultVideoUrl(raw);
     const value = text(body.status).toLowerCase();
-    const status = value === 'completed' ? 'SUCCESS'
-        : value === 'failed' ? 'FAILURE'
-        : value === 'queued' ? 'QUEUED'
-        : value === 'in_progress' ? 'IN_PROGRESS' : 'UNKNOWN';
+    const status = ['completed', 'success', 'succeeded', 'done'].includes(value) ? 'SUCCESS'
+        : ['failed', 'failure', 'error'].includes(value) ? 'FAILURE'
+        : ['queued', 'pending', 'waiting'].includes(value) ? 'QUEUED'
+        : ['in_progress', 'running', 'processing'].includes(value) ? 'IN_PROGRESS' : 'UNKNOWN';
     const rawProgress = Number.parseInt(String(body.progress ?? 0).replace(/%$/, ''), 10);
     const progress = status === 'SUCCESS' ? 100 : Math.max(0, Math.min(99, Number.isFinite(rawProgress) ? rawProgress : 0));
     const error = object(body.error);
@@ -181,6 +200,7 @@ export function parseTaskResult(ctx, raw) {
         progress: progress + '%',
         reason: status === 'FAILURE' ? text(error.message || body.message || wrapper.message) || 'Aixoras 视频生成失败'
             : status === 'UNKNOWN' ? '未知 Aixoras 视频任务状态: ' + (value || 'empty') : undefined,
+        ...(resultUrl ? { state: { resultUrl } } : {}),
     };
 }
 
@@ -190,11 +210,9 @@ export function listArtifacts(task) {
 
 export function buildContentRequest(ctx) {
     fail(ctx.artifactKey === 'video', '视频文件不存在');
-    const wrapper = object(ctx.data);
-    const body = isObject(wrapper.data) ? wrapper.data : wrapper;
-    const metadata = parseMetadata(body.metadata);
-    const target = text(metadata.url);
-    fail(/^https:\/\//i.test(target), 'Aixoras 尚未返回 HTTPS 视频地址');
+    const target = text(ctx.state?.resultUrl || resultVideoUrl(ctx.data));
+    fail(target, 'Aixoras 已完成任务，但未返回可下载的视频地址');
+    fail(/^https?:\/\//i.test(target), 'Aixoras 返回的视频地址不是有效 HTTP(S) URL');
     const base = new URL(text(ctx.baseUrl));
     const result = new URL(target);
     const request = { url: result.toString(), method: ctx.clientRequest.method };

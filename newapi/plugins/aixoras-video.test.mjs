@@ -139,6 +139,8 @@ test('task states and progress map to NewAPI plugin statuses', () => {
     assert.deepEqual(status({ status: 'queued', progress: 0 }), { status: 'QUEUED', progress: '0%', reason: undefined });
     assert.deepEqual(status({ status: 'in_progress', progress: 45 }), { status: 'IN_PROGRESS', progress: '45%', reason: undefined });
     assert.deepEqual(status({ status: 'completed', progress: 99 }), { status: 'SUCCESS', progress: '100%', reason: undefined });
+    assert.equal(status({ status: 'SUCCESS', progress: 100 }).status, 'SUCCESS');
+    assert.equal(status({ data: { status: 'SUCCESS', result_url: 'https://media.example/video.mp4' } }).status, 'SUCCESS');
     assert.equal(status({ status: 'failed', error: { message: 'provider error' } }).reason, 'provider error');
     assert.equal(status({ status: 'unexpected' }).status, 'UNKNOWN');
     assert.equal(status({ data: { status: 'in_progress', progress: 120 } }).progress, '99%');
@@ -156,6 +158,30 @@ test('completed task exposes metadata.url as credentialless CDN content', () => 
     assert.equal(content.headers, undefined);
 });
 
+test('task polling extracts media URL from New API retained task data into plugin state', () => {
+    const raw = {
+        code: 'success',
+        data: { status: 'SUCCESS', data: { data: { status: 'succeeded', url: 'https://media.aixoras.com/nested.mp4' } } },
+    };
+    const task = plugin.parseTaskResult({}, raw);
+    assert.deepEqual(task.state, { resultUrl: 'https://media.aixoras.com/nested.mp4' });
+    const content = plugin.buildContentRequest({
+        ...base, artifactKey: 'video', data: {}, state: task.state, clientRequest: { method: 'GET' },
+    });
+    assert.deepEqual(content, { url: 'https://media.aixoras.com/nested.mp4', method: 'GET', credentialless: true });
+});
+
+test('completed task reads the provider result URL from its persisted response snapshot', () => {
+    const content = plugin.buildContentRequest({
+        ...base, artifactKey: 'video', taskId: 'gateway-task',
+        data: { code: 0, message: 'success', data: { task_id: 'upstream-task', status: 'SUCCESS', result_url: 'https://media.aixoras.com/result.mp4' } },
+        clientRequest: { method: 'GET' },
+    });
+    assert.deepEqual(content, {
+        url: 'https://media.aixoras.com/result.mp4', method: 'GET', credentialless: true,
+    });
+});
+
 test('same-origin media keeps auth, while a missing or non-HTTPS video URL is rejected', () => {
     const content = plugin.buildContentRequest({
         ...base, artifactKey: 'video', data: { metadata: { url: 'https://api.aixoras.com/files/video.mp4' } },
@@ -164,6 +190,6 @@ test('same-origin media keeps auth, while a missing or non-HTTPS video URL is re
     assert.deepEqual(content, {
         url: 'https://api.aixoras.com/files/video.mp4', method: 'HEAD', headers: { Authorization: 'Bearer test-token' },
     });
-    assert.throws(() => plugin.buildContentRequest({ ...base, artifactKey: 'video', data: {}, clientRequest: { method: 'GET' } }), /尚未返回 HTTPS 视频地址/);
+    assert.throws(() => plugin.buildContentRequest({ ...base, artifactKey: 'video', data: {}, clientRequest: { method: 'GET' } }), /未返回可下载的视频地址/);
     assert.throws(() => plugin.buildContentRequest({ ...base, artifactKey: 'image', data: {}, clientRequest: { method: 'GET' } }), /视频文件不存在/);
 });
