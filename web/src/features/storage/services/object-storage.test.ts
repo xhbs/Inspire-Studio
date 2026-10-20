@@ -60,3 +60,20 @@ test("原有存储服务商的必填字段和公开地址逻辑保持可用", ()
     assert.equal(isObjectStorageReady({ ...cos, provider: "qiniuKodo" }), false);
     assert.equal(isObjectStorageReady({ ...cos, provider: "qiniuKodo", publicBaseUrl: "https://cdn.example.com" }), true);
 });
+
+test("又拍云使用操作员、服务名和绑定的公开域名，无需 Bucket Region", () => {
+    const upyun = createObjectStorageConfig({
+        provider: "upyun",
+        accessKey: "operator",
+        secretKey: "operator-password",
+        bucket: "ai-video-lemon",
+        endpoint: "https://v0.api.upyun.com",
+        publicBaseUrl: "https://ai-video.sosour.top",
+    });
+    assert.equal(upyun.region, "");
+    assert.equal(isObjectStorageReady(upyun), true);
+    assert.equal(buildObjectStoragePublicUrl(upyun, "generated/images/example.png"), "https://ai-video.sosour.top/generated/images/example.png");
+    assert.equal(isObjectStorageReady({ ...upyun, publicBaseUrl: "" }), false);
+    assert.equal(isObjectStorageReady({ ...upyun, endpoint: "https://v0.api.upyun.com/path" }), false);
+    assert.match(objectStorageReadyMessage({ ...upyun, publicBaseUrl: "" }), /公开访问域名/);
+});

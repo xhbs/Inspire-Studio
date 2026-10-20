@@ -73,7 +73,7 @@ public final class ObjectStorageUrlBuilder {
      * @param key String 对象键
      * @return String 编码后的对象键
      */
-    private static String encodeKeyPath(String key) {
+    static String encodeKeyPath(String key) {
         return Arrays.stream(key.split("/"))
                 .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"))
                 .reduce((left, right) -> left + "/" + right)

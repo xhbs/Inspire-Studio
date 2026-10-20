@@ -12,6 +12,11 @@ type UploadObjectInput = {
 };
 
 export function isObjectStorageReady(config: ObjectStorageConfig) {
+    if (config.provider === "upyun") {
+        return Boolean(config.accessKey.trim() && config.secretKey.trim() && config.bucket.trim())
+            && isCleanHttpUrl(config.publicBaseUrl)
+            && (!config.endpoint.trim() || isUpyunEndpoint(config.endpoint));
+    }
     if (!config.accessKey.trim() || !config.secretKey.trim() || !config.bucket.trim() || !config.region.trim()) return false;
     if (config.provider === "cloudflareR2") return !r2ConfigError(config);
     if (config.provider === "aliyunOss") return Boolean(config.endpoint.trim());
@@ -64,6 +69,12 @@ export function buildObjectStoragePublicUrl(config: ObjectStorageConfig, key: st
 
 export function objectStorageReadyMessage(config?: ObjectStorageConfig) {
     if (!config) return "对象存储不存在";
+    if (config.provider === "upyun") {
+        if (!config.accessKey.trim() || !config.secretKey.trim() || !config.bucket.trim()) return "请填写又拍云操作员、操作员密码和服务名";
+        if (!isCleanHttpUrl(config.publicBaseUrl)) return "请填写已绑定该又拍云服务的公开访问域名";
+        if (config.endpoint.trim() && !isUpyunEndpoint(config.endpoint)) return "又拍云 API 地址应为根路径 HTTP(S) 地址，例如 https://v0.api.upyun.com";
+        return "又拍云配置不完整";
+    }
     if (!config.accessKey.trim() || !config.secretKey.trim() || !config.bucket.trim() || !config.region.trim()) {
         return "请完整填写访问密钥、密钥、Bucket 和 Region";
     }
@@ -71,6 +82,27 @@ export function objectStorageReadyMessage(config?: ObjectStorageConfig) {
     if (config.provider === "aliyunOss" && !config.endpoint.trim()) return "请填写阿里云OSS Endpoint";
     if (config.provider === "qiniuKodo" && !config.publicBaseUrl.trim()) return "请填写七牛云Kodo公开访问地址";
     return "对象存储配置不完整";
+}
+
+function isCleanHttpUrl(value: string) {
+    try {
+        const url = new URL(value.trim());
+        return (url.protocol === "https:" || url.protocol === "http:")
+            && !url.username && !url.password && !url.search && !url.hash;
+    } catch {
+        return false;
+    }
+}
+
+function isUpyunEndpoint(value: string) {
+    try {
+        const url = new URL(value.trim());
+        return (url.protocol === "https:" || url.protocol === "http:")
+            && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash
+            && (!url.pathname || url.pathname === "/");
+    } catch {
+        return false;
+    }
 }
 
 function parseHttpsUrl(value: string) {

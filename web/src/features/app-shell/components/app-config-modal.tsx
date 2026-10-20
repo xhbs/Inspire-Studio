@@ -78,6 +78,7 @@ const objectStorageProviderOptions: Array<{ label: string; value: ObjectStorageP
     { label: "阿里云OSS", value: "aliyunOss" },
     { label: "七牛云Kodo", value: "qiniuKodo" },
     { label: "Cloudflare R2", value: "cloudflareR2" },
+    { label: "又拍云", value: "upyun" },
 ];
 
 const qiniuRegionOptions = [
@@ -121,6 +122,14 @@ const objectStorageProviderFields: Record<ObjectStorageProvider, { accessKeyLabe
         regionLabel: "Region",
         regionPlaceholder: "auto",
         publicBaseUrlExtra: "必填。填写当前 Bucket 已启用的 https://pub-xxx.r2.dev 或自定义域名；S3 API Endpoint 不能作为公开媒体地址。",
+    },
+    upyun: {
+        accessKeyLabel: "操作员",
+        secretKeyLabel: "操作员密码",
+        bucketPlaceholder: "ai-video-lemon",
+        regionLabel: "区域（无需填写）",
+        regionPlaceholder: "",
+        publicBaseUrlExtra: "必填。填写已绑定此服务的公开访问域名，例如 https://ai-video.sosour.top。",
     },
 };
 
@@ -918,10 +927,10 @@ export function AppConfigModal() {
                                                             <Form.Item label={providerFields.secretKeyLabel} className="mb-0">
                                                                 <Input.Password value={storage.secretKey} autoComplete="new-password" disabled={isSaving} onChange={(event) => updateDraftObjectStorage(storage.id, { secretKey: event.target.value })} />
                                                             </Form.Item>
-                                                            <Form.Item label="Bucket" className="mb-0">
+                                                            <Form.Item label={storage.provider === "upyun" ? "服务名" : "Bucket"} className="mb-0">
                                                                 <Input value={storage.bucket} placeholder={providerFields.bucketPlaceholder} disabled={isSaving} onChange={(event) => updateDraftObjectStorage(storage.id, { bucket: event.target.value })} />
                                                             </Form.Item>
-                                                            <Form.Item label={providerFields.regionLabel} extra={storage.provider === "cloudflareR2" ? "R2 使用固定值 auto。" : undefined} className="mb-0">
+                                                            {storage.provider !== "upyun" ? <Form.Item label={providerFields.regionLabel} extra={storage.provider === "cloudflareR2" ? "R2 使用固定值 auto。" : undefined} className="mb-0">
                                                                 {storage.provider === "qiniuKodo" ? (
                                                                     <Select
                                                                         value={storage.region || undefined}
@@ -938,7 +947,7 @@ export function AppConfigModal() {
                                                                         onChange={(event) => updateDraftObjectStorage(storage.id, { region: event.target.value })}
                                                                     />
                                                                 )}
-                                                            </Form.Item>
+                                                            </Form.Item> : null}
                                                             {storage.provider === "aliyunOss" ? (
                                                                 <Form.Item label="Endpoint" extra="必须填写包含 http:// 或 https:// 的 OSS Endpoint。" className="mb-0 md:col-span-2">
                                                                     <Input
@@ -959,9 +968,19 @@ export function AppConfigModal() {
                                                                     />
                                                                 </Form.Item>
                                                             ) : null}
+                                                            {storage.provider === "upyun" ? (
+                                                                <Form.Item label="API 地址" extra="默认使用又拍云智能选路地址；通常无需修改。" className="mb-0 md:col-span-2">
+                                                                    <Input
+                                                                        value={storage.endpoint || "https://v0.api.upyun.com"}
+                                                                        placeholder="https://v0.api.upyun.com"
+                                                                        disabled={isSaving}
+                                                                        onChange={(event) => updateDraftObjectStorage(storage.id, { endpoint: event.target.value })}
+                                                                    />
+                                                                </Form.Item>
+                                                            ) : null}
                                                             <Form.Item
                                                                 label={storage.provider === "cloudflareR2" ? "公开访问域名" : "公开访问地址"}
-                                                                required={storage.provider === "qiniuKodo" || storage.provider === "cloudflareR2"}
+                                                                required={storage.provider === "qiniuKodo" || storage.provider === "cloudflareR2" || storage.provider === "upyun"}
                                                                 extra={providerFields.publicBaseUrlExtra}
                                                                 className="mb-0 md:col-span-2"
                                                             >

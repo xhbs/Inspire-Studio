@@ -650,7 +650,7 @@ export function createObjectStorageConfig(input: Partial<ObjectStorageConfig> = 
         accessKey: input.accessKey || "",
         secretKey: input.secretKey || "",
         bucket: input.bucket || "",
-        region: input.provider === "cloudflareR2" ? "auto" : input.region || "",
+        region: input.provider === "cloudflareR2" ? "auto" : input.provider === "upyun" ? "" : input.region || "",
         endpoint: input.endpoint || "",
         directory: input.directory || "inspire-studio",
         publicBaseUrl: input.publicBaseUrl || "",

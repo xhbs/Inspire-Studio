@@ -17,7 +17,11 @@ export async function localClients({ adminSession = true, studioSession = true }
         if (!response.ok || data.success === false || (data.code !== undefined && data.code !== 0)) {
             // Do not include upstream response bodies, which can echo channel credentials.
             let diagnostic = String(data.message || data.msg || '');
-            for (const secret of [...Object.entries(env).filter(([key]) => /KEY|TOKEN|PASSWORD|SECRET/.test(key)).map(([,value]) => value), token, body?.key, body?.channel?.key]) {
+            const processSecrets = Object.entries(process.env)
+                .filter(([key]) => /KEY|TOKEN|PASSWORD|SECRET/i.test(key))
+                .map(([, value]) => value);
+            for (const secret of [...Object.entries(env).filter(([key]) => /KEY|TOKEN|PASSWORD|SECRET/i.test(key)).map(([,value]) => value),
+                ...processSecrets, token, body?.key, body?.apiKey, body?.channel?.key, body?.channel?.apiKey]) {
                 if (typeof secret === 'string' && secret.length > 5) diagnostic = diagnostic.split(secret).join('[redacted]');
             }
             throw Error(path + ': HTTP ' + response.status + ' request rejected' + (['/api/plugin/task','/api/channel/','/ai/task/createTask'].includes(path) ? ': ' + diagnostic.slice(0,700) : ''));
