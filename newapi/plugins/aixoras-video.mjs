@@ -43,7 +43,9 @@ function requestFromBody(ctx) {
     for (const key of ['metadata', 'options', 'images', 'image', 'input_reference', 'reference_images', 'videos', 'audio']) {
         if (req[key] !== undefined) req[key] = parseJsonField(req[key], key);
     }
-    fail(!(ctx.body.files || []).length, 'Aixoras 视频接口的参考图必须是可由上游访问的 HTTP(S) URL');
+    const files = ctx.body.files || [];
+    fail(files.every(file => ['image', 'input_reference', 'reference_images'].includes(file.field)),
+        'Aixoras 视频接口当前只支持图片参考');
     return req;
 }
 
@@ -86,6 +88,8 @@ export const protocols = {
             const req = requestFromBody(ctx);
             const metadata = parseMetadata(req.metadata);
             const images = imageUrls(req, metadata);
+            fail(!(ctx.body.files || []).length || images.length > 0,
+                '上传的参考图缺少可由上游访问的 HTTP(S) 图片 URL');
             delete metadata.reference_images;
             const mode = text(req.video_generation_mode) || (images.length ? 'image-to-video' : 'text-to-video');
             return { kind: 'submit', model: ctx.model, action: mode, requestBody: { ...req, metadata, images } };

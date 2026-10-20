@@ -89,7 +89,7 @@ test('a base URL already ending in /v1 is not duplicated', () => {
     assert.equal(request.url, 'https://aixoras.com/v1/video/generations');
 });
 
-test('references must be remote HTTP(S) URLs and unsupported media is rejected rather than dropped', () => {
+test('references must be remote HTTP(S) URLs; multipart image files are accepted only with their public URL fields', () => {
     const request = value => plugin.buildSubmitRequest({ ...base, requestBody: { prompt, ...value } });
     assert.throws(() => request({ images: ['data:image/png;base64,abc'] }), /HTTP\(S\) URL/);
     assert.throws(() => request({ images: [{ __fileRef: 'file-1' }] }), /HTTP\(S\) URL/);
@@ -97,7 +97,17 @@ test('references must be remote HTTP(S) URLs and unsupported media is rejected r
     assert.throws(() => request({ audio: ['https://cdn.example/ref.mp3'] }), /不支持参考视频或音频/);
     assert.throws(() => plugin.protocols.openai_video.decodeRequest({ ...base, body: {
         kind: 'multipart', fields: { prompt: [prompt] }, files: [{ field: 'image', ref: 'file-1' }],
-    } }), /必须是可由上游访问的 HTTP\(S\) URL/);
+    } }), /缺少可由上游访问的 HTTP\(S\) 图片 URL/);
+    const decoded = plugin.protocols.openai_video.decodeRequest({ ...base, body: {
+        kind: 'multipart', fields: {
+            prompt: [prompt], images: ['["https://cdn.example/frame.png"]'],
+            image: ['https://cdn.example/frame.png'], input_reference: ['https://cdn.example/frame.png'],
+        }, files: [{ field: 'image', ref: 'file-1' }],
+    } });
+    assert.deepEqual(decoded.requestBody.images, ['https://cdn.example/frame.png']);
+    assert.throws(() => plugin.protocols.openai_video.decodeRequest({ ...base, body: {
+        kind: 'multipart', fields: { prompt: [prompt] }, files: [{ field: 'audio', ref: 'audio-1' }],
+    } }), /只支持图片参考/);
 });
 
 test('invalid model, prompt, duration and missing token are rejected before submission', () => {
