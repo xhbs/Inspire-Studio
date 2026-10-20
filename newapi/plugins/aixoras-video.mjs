@@ -20,7 +20,11 @@ const object = value => isObject(value) ? value : {};
 function parseJsonField(value, field) {
     if (typeof value !== 'string') return value;
     try { return JSON.parse(value); }
-    catch { throw new Error('参数 ' + field + ' 必须是合法 JSON'); }
+    catch {
+        // NewAPI may pass reference URL fields as plain text in multipart requests.
+        if (['image', 'input_reference'].includes(field) && /^https?:\/\//i.test(value.trim())) return value.trim();
+        throw new Error('参数 ' + field + ' 必须是合法 JSON');
+    }
 }
 
 function requestFromBody(ctx) {

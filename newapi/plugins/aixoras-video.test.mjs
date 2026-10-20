@@ -42,6 +42,32 @@ test('multipart JSON fields are decoded and public image URLs are deduplicated',
     assert.deepEqual(request.body.metadata, { aspect_ratio: '9:16' });
 });
 
+test('multipart accepts a plain singular image URL from the OpenAI-compatible video request', () => {
+    const image = 'https://cdn.example/frame.png';
+    const decoded = plugin.protocols.openai_video.decodeRequest({
+        ...base,
+        body: { kind: 'multipart', fields: {
+            prompt: [prompt], image: [image], seconds: ['5'],
+        } },
+    });
+    assert.deepEqual(decoded.requestBody.images, [image]);
+    const request = plugin.buildSubmitRequest({ ...base, requestBody: decoded.requestBody });
+    assert.deepEqual(request.body.images, [image]);
+});
+
+test('multipart accepts a plain input_reference URL passed by the Studio video client', () => {
+    const image = 'https://ai-video.sosour.top/ai-video/images/20261021/31f0e1dc800fb688044b96ee.png';
+    const decoded = plugin.protocols.openai_video.decodeRequest({
+        ...base,
+        body: { kind: 'multipart', fields: {
+            prompt: [prompt], input_reference: [image], seconds: ['5'],
+        } },
+    });
+    assert.deepEqual(decoded.requestBody.images, [image]);
+    const request = plugin.buildSubmitRequest({ ...base, requestBody: decoded.requestBody });
+    assert.deepEqual(request.body.images, [image]);
+});
+
 test('submit uses the Aixoras async endpoint, Bearer auth and documented duration fields', () => {
     const request = plugin.buildSubmitRequest({
         ...base,
