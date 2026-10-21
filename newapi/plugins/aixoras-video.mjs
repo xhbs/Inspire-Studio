@@ -213,10 +213,19 @@ export function buildContentRequest(ctx) {
     const target = text(ctx.state?.resultUrl || resultVideoUrl(ctx.data));
     fail(target, 'Aixoras 已完成任务，但未返回可下载的视频地址');
     fail(/^https?:\/\//i.test(target), 'Aixoras 返回的视频地址不是有效 HTTP(S) URL');
-    const base = new URL(text(ctx.baseUrl));
-    const result = new URL(target);
-    const request = { url: result.toString(), method: ctx.clientRequest.method };
-    if (result.origin === base.origin) request.headers = auth(ctx);
+    // NewAPI's JS sandbox has no WHATWG URL global; preserve signed URLs verbatim.
+    const origin = value => {
+        const match = value.match(/^(https?):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?(?=[/?#]|$)/i);
+        fail(match && !/[\u0000-\u0020\u007f\\]/.test(value) && !value.includes('#'),
+            'Invalid HTTP(S) media URL');
+        const scheme = match[1].toLowerCase();
+        const host = match[2].toLowerCase();
+        const port = match[3] ? Number(match[3]) : scheme === 'https' ? 443 : 80;
+        fail(port > 0 && port <= 65535, 'Invalid HTTP(S) media URL port');
+        return scheme + '://' + host + ':' + port;
+    };
+    const request = { url: target, method: ctx.clientRequest.method };
+    if (origin(target) === origin(text(ctx.baseUrl))) request.headers = auth(ctx);
     else request.credentialless = true;
     return request;
 }

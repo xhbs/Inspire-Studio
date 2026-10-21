@@ -193,3 +193,35 @@ test('same-origin media keeps auth, while a missing or non-HTTPS video URL is re
     assert.throws(() => plugin.buildContentRequest({ ...base, artifactKey: 'video', data: {}, clientRequest: { method: 'GET' } }), /未返回可下载的视频地址/);
     assert.throws(() => plugin.buildContentRequest({ ...base, artifactKey: 'image', data: {}, clientRequest: { method: 'GET' } }), /视频文件不存在/);
 });
+
+
+test('content hook runs in the gateway sandbox without browser globals', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { runInNewContext } = await import('node:vm');
+    const source = (await readFile(new URL('./aixoras-video.mjs', import.meta.url), 'utf8'))
+        .replace(/^export /gm, '');
+    const context = {
+        ctx: { ...base, artifactKey: 'video',
+            data: { code: 'success', data: { status: 'SUCCESS', result_url: 'https://media.aixoras.com/result.mp4?signature=keep%2Bthis' } },
+            clientRequest: { method: 'GET' } },
+    };
+    const result = runInNewContext(source + '\nbuildContentRequest(ctx);', context);
+    assert.equal(result.url, context.ctx.data.data.result_url);
+    assert.equal(result.credentialless, true);
+    assert.equal(result.headers, undefined);
+});
+
+
+test('sandbox origin comparison handles default ports without leaking credentials', () => {
+    const content = (url, baseUrl = base.baseUrl) => plugin.buildContentRequest({
+        ...base, baseUrl, artifactKey: 'video', data: { result_url: url }, clientRequest: { method: 'GET' },
+    });
+    assert.deepEqual(content('https://API.AIXORAS.COM:443/video.mp4').headers, { Authorization: 'Bearer test-token' });
+    for (const url of ['https://api.aixoras.com.evil.example/video.mp4', 'https://api.aixoras.com:444/video.mp4', 'http://api.aixoras.com/video.mp4']) {
+        assert.equal(content(url).credentialless, true);
+        assert.equal(content(url).headers, undefined);
+    }
+    for (const url of ['https://api.aixoras.com@evil.example/video.mp4', 'https://api.aixoras.com:99999/video.mp4', 'https://api.aixoras.com/video.mp4#fragment', 'https://api.aixoras.com/\\evil.example/video.mp4']) {
+        assert.throws(() => content(url), /Invalid HTTP/);
+    }
+});
