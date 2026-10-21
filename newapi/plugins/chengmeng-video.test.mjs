@@ -61,6 +61,30 @@ test('base URL normalization avoids duplicate API and v1 path segments', () => {
     }
 });
 
+test('URL validation works without the WHATWG URL global used by the New API sandbox', () => {
+    const originalURL = globalThis.URL;
+    const signedImage = 'https://media.example/frame.png?signature=a%2Fb';
+    const signedVideo = 'https://cdn.example/video.mp4?token=x%2Fy';
+    try {
+        globalThis.URL = undefined;
+        const request = plugin.buildSubmitRequest({
+            ...base,
+            requestBody: requestBody({ images: [signedImage] }),
+        });
+        assert.equal(request.url, 'https://api.chengmeng.site/api/tasks');
+        assert.deepEqual(request.body.images, [signedImage]);
+
+        const content = plugin.buildContentRequest({
+            artifactKey: 'video',
+            data: { result_url: signedVideo },
+            clientRequest: { method: 'GET' },
+        });
+        assert.equal(content.url, signedVideo);
+    } finally {
+        globalThis.URL = originalURL;
+    }
+});
+
 test('decode accepts documented JSON and multipart fields while requiring public HTTPS image URLs', () => {
     const decoded = plugin.protocols.openai_video.decodeRequest({
         ...base,

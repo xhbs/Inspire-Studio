@@ -18,11 +18,32 @@ const object = value => isObject(value) ? value : {};
 const list = value => Array.isArray(value) ? value : value == null || value === '' ? [] : [value];
 const text = value => String(value == null ? '' : value).trim();
 
+function parseWebUrl(value) {
+    const candidate = text(value);
+    const match = candidate.match(/^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?(?=[/?#]|$)/i);
+    if (!match || /[\u0000-\u0020\u007f\\]/.test(candidate)) return undefined;
+
+    const protocol = match[1].toLowerCase() + ':';
+    const hostname = match[2].toLowerCase();
+    const port = match[3] === undefined ? undefined : Number(match[3]);
+    if (port !== undefined && (port < 1 || port > 65535)) return undefined;
+
+    if (hostname.startsWith('[')) {
+        if (!hostname.includes(':')) return undefined;
+    } else {
+        const domain = hostname.endsWith('.') ? hostname.slice(0, -1) : hostname;
+        if (!domain || domain.length > 253 || domain.split('.').some(label =>
+            !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))) return undefined;
+    }
+
+    return { protocol, hostname, port, href: candidate };
+}
+
 function apiRoot(baseUrl) {
     const raw = text(baseUrl).replace(/\/+$/, '');
     check(raw, 'Chengmeng API base URL is missing');
-    let parsed;
-    try { parsed = new URL(raw); } catch { throw new Error('Chengmeng API base URL is invalid'); }
+    const parsed = parseWebUrl(raw);
+    check(parsed, 'Chengmeng API base URL is invalid');
     check(['http:', 'https:'].includes(parsed.protocol), 'Chengmeng API base URL must use HTTP(S)');
     return raw.replace(/\/(?:api\/)?v1$/i, '').replace(/\/api$/i, '');
 }
@@ -73,10 +94,9 @@ function publicUrls(values, label) {
     return list(values).map(value => {
         const candidate = isObject(value) ? value.image_url || value.url : value;
         check(typeof candidate === 'string' && candidate.trim(), 'Chengmeng ' + label + ' must be public HTTPS URLs');
-        let parsed;
-        try { parsed = new URL(candidate); } catch { throw new Error('Chengmeng ' + label + ' must be public HTTPS URLs'); }
-        check(parsed.protocol === 'https:' && parsed.hostname, 'Chengmeng ' + label + ' must be public HTTPS URLs');
-        return parsed.toString();
+        const parsed = parseWebUrl(candidate);
+        check(parsed && parsed.protocol === 'https:' && parsed.hostname, 'Chengmeng ' + label + ' must be public HTTPS URLs');
+        return parsed.href;
     });
 }
 
@@ -211,8 +231,8 @@ export function buildContentRequest(ctx) {
     check(ctx.artifactKey === 'video', 'Video artifact is not available');
     const data = taskData(ctx.data);
     const target = text(data.result_url || data.download_url);
-    let parsed;
-    try { parsed = new URL(target); } catch { throw new Error('Chengmeng did not return a valid video URL'); }
+    const parsed = parseWebUrl(target);
+    check(parsed, 'Chengmeng did not return a valid video URL');
     check(['http:', 'https:'].includes(parsed.protocol), 'Chengmeng did not return a valid video URL');
-    return { url: parsed.toString(), method: ctx.clientRequest.method, credentialless: true };
+    return { url: parsed.href, method: ctx.clientRequest.method, credentialless: true };
 }
